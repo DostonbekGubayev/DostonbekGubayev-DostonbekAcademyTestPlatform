@@ -22,14 +22,21 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
+app.use(cors({
+  origin: '*', // Productionda xavfsizlik uchun faqat Netlify domeningizni qo'yishingiz mumkin
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json());
 
+// Muhit o'zgaruvchisidan bazaga ulanish (Render orqali beriladi)
+const connectionString = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_kGga7O3odcsD@ep-summer-bar-aexl781t-pooler.c-2.us-east-2.aws.neon.tech/dostonbek_academy?sslmode=require";
 
-
-
-
-
-const connectionString = "postgresql://neondb_owner:npg_kGga7O3odcsD@ep-summer-bar-aexl781t-pooler.c-2.us-east-2.aws.neon.tech/dostonbek_academy?sslmode=require";
 
 const pool = new Pool({
   connectionString,
