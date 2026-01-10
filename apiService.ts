@@ -1,30 +1,18 @@
 
 import { QuizResult, User, CenterTest } from './types';
 
-const API_BASE_URL = '/api';
-
-const API_BASE = "https://dostonbekgubayev.onrender.com";
-
-fetch(`${API_BASE}/api/gemini`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    prompt: "Salom Gemini"
-  })
-})
-.then(res => res.json())
-.then(data => console.log(data.text));
-
+// Productionda Render URL'ni, localda esa Vite proxy'ni ishlatish
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? (process.env.VITE_API_URL || 'https://dostonbekgubayev.onrender.com/api') 
+  : '/api';
 
 const safeFetch = async (url: string, options: any = {}) => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 sekund
-
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // Productionda biroz ko'proq kutish (Render sleep bo'lishi mumkin)
+  
   try {
-    const response = await fetch(url, {
-      ...options,
+    const response = await fetch(url, { 
+      ...options, 
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -76,7 +64,6 @@ export const apiService = {
   },
 
   saveResult: async (result: QuizResult) => {
-    // Lokal saqlash har doim ishlasin
     const local = getLocal('local_results');
     local.unshift(result);
     localStorage.setItem('local_results', JSON.stringify(local.slice(0, 50)));
@@ -95,17 +82,17 @@ export const apiService = {
 
   login: async (email: string | undefined, fullName: string, phone: string, school: string, interest: string, additionalCenter?: string): Promise<User> => {
     const isAdmin = email?.toLowerCase().trim() === 'dostonbekacademy@gmail.com';
-    const userData: User = {
-      fullName,
-      email: email || '',
-      phone,
-      school,
-      interest,
+    const userData: User = { 
+      fullName, 
+      email: email || '', 
+      phone, 
+      school, 
+      interest, 
       additionalCenter,
       role: isAdmin ? 'ADMIN' : 'STUDENT',
       isLoggedIn: true
     };
-
+    
     if (!isAdmin) {
       await safeFetch(`${API_BASE_URL}/users`, {
         method: 'POST',
