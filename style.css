@@ -1,0 +1,159 @@
+
+:root {
+    --indigo-700: #059669; /* Emerald 600 */
+    --indigo-900: #064e3b; /* Emerald 900 */
+    --emerald-500: #10b981;
+    --emerald-600: #059669;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #1e293b;
+    touch-action: manipulation;
+    font-size: 16px;
+    background-color: #f8fafc;
+}
+
+@media (min-width: 768px) {
+    body { font-size: 18px; }
+}
+
+.animate-in {
+    animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Dashboard Test Card Hover Fixes */
+.group:hover .group-hover\:opacity-100 {
+    opacity: 1 !important;
+}
+
+.group:hover .group-hover\:text-emerald-700 {
+    color: var(--emerald-600) !important;
+}
+
+/* Certificate Display Fixes */
+.certificate-mobile-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 100vh;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+}
+
+#cert-print-area {
+    background-color: white;
+    box-shadow: 0 40px 100px -20px rgba(0,0,0,0.5);
+    border-radius: 4px;
+    position: relative;
+    transform-origin: center center;
+    flex-shrink: 0;
+    margin: 0 auto !important;
+}
+
+/* Scaling logic for preview */
+@media (min-width: 1300px) {
+    #cert-print-area { transform: scale(0.9); }
+}
+@media (max-width: 1299px) and (min-width: 992px) {
+    #cert-print-area { transform: scale(0.75); }
+}
+@media (max-width: 991px) and (min-width: 768px) {
+    #cert-print-area { transform: scale(0.6); }
+}
+@media (max-width: 767px) and (min-width: 480px) {
+    #cert-print-area { transform: scale(0.4); }
+}
+@media (max-width: 479px) {
+    #cert-print-area { transform: scale(0.3); }
+}
+
+/* Export override */
+.html2pdf__container #cert-print-area {
+    transform: none !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    box-shadow: none !important;
+    top: 0 !important;
+    left: 0 !important;
+    position: relative !important;
+    width: 297mm !important;
+    height: 210mm !important;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.official-academy-seal-small {
+    position: relative;
+    z-index: 50;
+}
+
+/* Range Input Styling */
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+}
+
+input[type=range]:focus {
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8px;
+  cursor: pointer;
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: #059669; /* Emerald 600 */
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -6px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Footer Specific Styles */
+footer a, footer button {
+    transition: all 0.3s ease;
+}
+
+footer .group:hover {
+    border-color: #10b981;
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.2);
+}
