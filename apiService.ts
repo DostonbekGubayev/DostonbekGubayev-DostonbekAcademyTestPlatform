@@ -3,6 +3,21 @@ import { QuizResult, User, CenterTest } from './types';
 
 const API_BASE_URL = '/api';
 
+const API_BASE = "https://dostonbekgubayev.onrender.com";
+
+fetch(`${API_BASE}/api/gemini`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    prompt: "Salom Gemini"
+  })
+})
+.then(res => res.json())
+.then(data => console.log(data.text));
+
+
 const safeFetch = async (url: string, options: any = {}) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 sekund
