@@ -1,6 +1,6 @@
 [build]
 command = "npm run build"
-publish = "build"
+publish = "dist"
 functions = "functions"
 
 # API so‘rovlarni Netlify Function ga yo‘naltirish
@@ -15,3 +15,4 @@ force = true
 from = "/*"
 to = "/index.html"
 status = 200
+
