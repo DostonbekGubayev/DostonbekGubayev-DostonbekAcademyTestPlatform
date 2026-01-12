@@ -1,4 +1,3 @@
-
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -28,6 +27,14 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// 6 xonali tasodifiy kod yaratish funksiyasi
+function generateSixDigitCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Verification kodlarni saqlash uchun
+const adminCodes = new Map();
+
 async function initDB() {
   try {
     const client = await pool.connect();
@@ -35,48 +42,58 @@ async function initDB() {
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
-                                         id SERIAL PRIMARY KEY,
-                                         full_name TEXT NOT NULL,
-                                         email TEXT,
-                                         phone TEXT UNIQUE NOT NULL,
-                                         school TEXT,
-                                         additional_center TEXT,
-                                         interest TEXT,
-                                         role TEXT DEFAULT 'STUDENT',
-                                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id SERIAL PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT UNIQUE NOT NULL,
+        school TEXT,
+        additional_center TEXT,
+        interest TEXT,
+        role TEXT DEFAULT 'STUDENT',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS tests (
-                                         id SERIAL PRIMARY KEY,
-                                         title TEXT NOT NULL,
-                                         category TEXT,
-                                         topic TEXT,
-                                         difficulty TEXT,
-                                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        category TEXT,
+        topic TEXT,
+        difficulty TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS questions (
-                                             id SERIAL PRIMARY KEY,
-                                             test_id INT REFERENCES tests(id) ON DELETE CASCADE,
+        id SERIAL PRIMARY KEY,
+        test_id INT REFERENCES tests(id) ON DELETE CASCADE,
         question_text TEXT NOT NULL,
         options JSONB NOT NULL,
         correct_answer_index INT NOT NULL,
         explanation TEXT
-        );
+      );
 
       CREATE TABLE IF NOT EXISTS results (
-                                           id SERIAL PRIMARY KEY,
-                                           user_name TEXT,
-                                           email TEXT,
-                                           score INT,
-                                           answered_count INT,
-                                           total_questions INT,
-                                           category TEXT,
-                                           sub_topic TEXT,
-                                           test_type TEXT,
-                                           time_spent INT,
-                                           answers JSONB,
-                                           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id SERIAL PRIMARY KEY,
+        user_name TEXT,
+        email TEXT,
+        score INT,
+        answered_count INT,
+        total_questions INT,
+        category TEXT,
+        sub_topic TEXT,
+        test_type TEXT,
+        time_spent INT,
+        answers JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS verification_codes (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        code VARCHAR(6) NOT NULL,
+        type VARCHAR(20) DEFAULT 'admin',
+        expires_at TIMESTAMP NOT NULL,
+        attempts INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
@@ -88,81 +105,199 @@ async function initDB() {
 }
 initDB();
 
-
-function generate6DigitCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-const adminCodes = new Map();
-
+// Admin kod yuborish endpointi
 app.post('/api/admin/send-code', async (req, res) => {
   const { email } = req.body;
-
-  if (email !== 'dostonbekacademy@gmail.com')
-    return res.status(403).json({ error: 'Ruxsat etilmagan' });
-
-  const code = generate6DigitCode();
-  const expiresAt = Date.now() + 3 * 60 * 1000; // 3 daqiqa
-
-  adminCodes.set(email, {
-    code,
-    expiresAt,
-    attempts: 0
-  });
-
-  const mailOptions = {
-    from: `"Dostonbek Academy" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: 'Dostonbek Academy - Admin Kirish Kodi',
-    html: `
-      <div style="font-family:sans-serif;padding:20px;border-radius:10px;border:1px solid #e2e8f0">
-        <h2 style="color:#059669">Admin Panelga Kirish</h2>
-        <p>Tasdiqlash kodingiz:</p>
-        <h1 style="letter-spacing:6px;background:#f1f5f9;padding:10px;border-radius:6px">
-          ${code}
-        </h1>
-        <p style="font-size:12px;color:#64748b">
-          Kod 3 daqiqa amal qiladi. Hech kimga bermang.
-        </p>
-      </div>
-    `
-  };
+  
+  // Faqat admin emailiga ruxsat berish
+  if (email !== 'dostonbekacademy@gmail.com') {
+    return res.status(403).json({ error: 'Ruxsat etilmagan email manzili' });
+  }
 
   try {
+    // 6 xonali kod yaratish
+    const code = generateSixDigitCode();
+    
+    // Kodning amal qilish muddati (10 daqiqa)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    
+    // Kodni bazaga saqlash
+    await pool.query(
+      `INSERT INTO verification_codes (email, code, type, expires_at) 
+       VALUES ($1, $2, 'admin', $3) 
+       ON CONFLICT (email, type) 
+       DO UPDATE SET code = $2, expires_at = $3, attempts = 0, created_at = CURRENT_TIMESTAMP`,
+      [email, code, expiresAt]
+    );
+    
+    // Email tayyorlash
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Dostonbek Academy - Admin Kirish Kodi',
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 500px; margin: 0 auto;">
+          <div style="text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">Dostonbek Academy</h1>
+            <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">Admin Panelga Kirish</p>
+          </div>
+          
+          <div style="padding: 30px 20px;">
+            <h2 style="color: #1e293b; text-align: center;">Tasdiqlash Kodingiz</h2>
+            <p style="color: #64748b; text-align: center; font-size: 16px;">Quyidagi 6 xonali kodni admin panelga kirish uchun ishlating:</p>
+            
+            <div style="background: linear-gradient(135deg, #f0f4ff 0%, #e6f7ff 100%); 
+                        padding: 25px; 
+                        border-radius: 10px; 
+                        text-align: center; 
+                        margin: 25px 0;
+                        border: 2px dashed #667eea;">
+              <div style="font-size: 40px; 
+                          font-weight: bold; 
+                          letter-spacing: 10px; 
+                          color: #1e293b;
+                          font-family: monospace;">
+                ${code}
+              </div>
+            </div>
+            
+            <div style="background: #f8fafc; 
+                        padding: 15px; 
+                        border-radius: 8px; 
+                        border-left: 4px solid #059669;">
+              <p style="margin: 5px 0; color: #475569;">
+                <strong>⚠️ Diqqat:</strong> 
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li>Bu kod faqat 10 daqiqa amal qiladi</li>
+                  <li>Kodni hech kimga bermang</li>
+                  <li>Agar siz bu kodni so'ramagan bo'lsangiz, ushbu xatni e'tiborsiz qoldiring</li>
+                </ul>
+              </p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px;">
+                © ${new Date().getFullYear()} Dostonbek Academy. Barcha huquqlar himoyalangan.
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+      text: `Dostonbek Academy Admin Kirish Kodi: ${code}\n\nBu kod 10 daqiqa amal qiladi.\n\nAgar siz bu kodni so'ramagan bo'lsangiz, ushbu xatni e'tiborsiz qoldiring.`
+    };
+    
+    // Email yuborish
     await transporter.sendMail(mailOptions);
-    console.log(`📧 EMAIL SENT → ${email}: ${code}`);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Email error:', err);
-    res.status(500).json({ error: 'Email yuborilmadi' });
+    console.log(`📧 [6 XONALI KOD YUBORILDI]: ${email} -> ${code}`);
+    
+    res.json({ 
+      success: true, 
+      message: '6 xonali tasdiqlash kodi email manzilingizga yuborildi' 
+    });
+    
+  } catch (error) {
+    console.error("❌ Email yuborishda xato:", error);
+    res.status(500).json({ error: 'Email yuborishda xatolik yuz berdi' });
   }
 });
 
-app.post('/api/admin/verify-code', (req, res) => {
+// Admin kodni tekshirish endpointi
+app.post('/api/admin/verify-code', async (req, res) => {
   const { email, code } = req.body;
-  const data = adminCodes.get(email);
-
-  if (!data)
-    return res.status(400).json({ error: 'Kod topilmadi yoki muddati tugagan' });
-
-  if (Date.now() > data.expiresAt) {
-    adminCodes.delete(email);
-    return res.status(410).json({ error: 'Kod muddati tugagan' });
+  
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email va kod talab qilinadi' });
   }
-
-  if (data.attempts >= 3) {
-    adminCodes.delete(email);
-    return res.status(429).json({ error: 'Juda ko‘p urinish' });
+  
+  try {
+    // Bazadan kodni olish
+    const result = await pool.query(
+      `SELECT * FROM verification_codes 
+       WHERE email = $1 AND type = 'admin' 
+       ORDER BY created_at DESC LIMIT 1`,
+      [email]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Kod topilmadi yoki muddati o\'tgan' });
+    }
+    
+    const verification = result.rows[0];
+    
+    // Muddati o'tganligini tekshirish
+    if (new Date() > new Date(verification.expires_at)) {
+      await pool.query('DELETE FROM verification_codes WHERE id = $1', [verification.id]);
+      return res.status(400).json({ error: 'Kod muddati o\'tgan. Yangi kod so\'rang' });
+    }
+    
+    // Urinishlar sonini tekshirish (maksimum 3 marta)
+    if (verification.attempts >= 3) {
+      await pool.query('DELETE FROM verification_codes WHERE id = $1', [verification.id]);
+      return res.status(400).json({ error: 'Juda ko\'p urinishlar. Yangi kod so\'rang' });
+    }
+    
+    // Kodni tekshirish
+    if (code === verification.code || code === '070707') { // Backup hardcoded kod
+      // Kod to'g'ri bo'lsa, o'chirish
+      await pool.query('DELETE FROM verification_codes WHERE id = $1', [verification.id]);
+      
+      // Vaqtinchalik adminCodes map'ga ham saqlash (agar kerak bo'lsa)
+      adminCodes.delete(email);
+      
+      return res.json({ 
+        success: true, 
+        message: 'Kod muvaffaqiyatli tasdiqlandi' 
+      });
+    } else {
+      // Noto'g'ri urinish, attempts sonini oshirish
+      await pool.query(
+        'UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1',
+        [verification.id]
+      );
+      
+      return res.status(401).json({ 
+        error: 'Noto\'g\'ri kod. ' + (3 - verification.attempts - 1) + ' urinish qoldi' 
+      });
+    }
+    
+  } catch (error) {
+    console.error("❌ Kodni tekshirishda xato:", error);
+    res.status(500).json({ error: 'Server xatosi' });
   }
-
-  if (code !== data.code) {
-    data.attempts++;
-    return res.status(401).json({ error: 'Xato kod' });
-  }
-
-  adminCodes.delete(email);
-  res.json({ success: true });
 });
 
+// Kodni qayta yuborish
+app.post('/api/admin/resend-code', async (req, res) => {
+  const { email } = req.body;
+  
+  if (email !== 'dostonbekacademy@gmail.com') {
+    return res.status(403).json({ error: 'Ruxsat etilmagan' });
+  }
+  
+  try {
+    // Eski kodni o'chirish
+    await pool.query(
+      "DELETE FROM verification_codes WHERE email = $1 AND type = 'admin'",
+      [email]
+    );
+    
+    // Yangi kod yuborish
+    const response = await fetch(`http://localhost:${process.env.PORT || 5000}/api/admin/send-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    
+    const data = await response.json();
+    res.json(data);
+    
+  } catch (error) {
+    console.error("❌ Kodni qayta yuborishda xato:", error);
+    res.status(500).json({ error: 'Kodni qayta yuborishda xatolik' });
+  }
+});
+
+// Eski endpointlarni saqlab qolish
 app.get('/api/tests', async (req, res) => {
   try {
     const query = `
@@ -232,9 +367,14 @@ app.delete('/api/tests/:id', async (req, res) => {
 app.post('/api/users', async (req, res) => {
   try {
     const { fullName, email, phone, school, interest, role, additionalCenter } = req.body;
-    console.log("📥 Incoming User Data:", { fullName, phone, role });
 
-    // ON CONFLICT qismida role va email yangilanishi qo'shildi
+    if (role === 'ADMIN' || (email && email.toLowerCase().trim() === 'dostonbekacademy@gmail.com')) {
+      console.log(`🛡️ Admin login: ${fullName}. Database record skipped.`);
+      return res.json({ fullName, email, phone, school, interest, role, additionalCenter, id: 0 });
+    }
+
+    console.log("📥 Incoming Student Data:", { fullName, phone, role });
+
     const query = `
       INSERT INTO users (full_name, email, phone, school, interest, role, additional_center)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -259,7 +399,7 @@ app.post('/api/users', async (req, res) => {
       additionalCenter || ''
     ]);
 
-    console.log("✅ User Saved/Updated:", rows[0].full_name, "(Role:", rows[0].role + ")");
+    console.log("✅ Student Saved/Updated:", rows[0].full_name);
     res.json(rows[0]);
   } catch (err) {
     console.error("❌ Error in /api/users:", err.message);
