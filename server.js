@@ -93,7 +93,8 @@ async function initDB() {
         type VARCHAR(20) DEFAULT 'admin',
         expires_at TIMESTAMP NOT NULL,
         attempts INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(email, type)  -- Bu qatorni qo'shdim
       );
     `);
 
@@ -121,12 +122,16 @@ app.post('/api/admin/send-code', async (req, res) => {
     // Kodning amal qilish muddati (10 daqiqa)
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     
-    // Kodni bazaga saqlash
+    // Avval eski kodni o'chirib, yangisini saqlash
+    await pool.query(
+      `DELETE FROM verification_codes WHERE email = $1 AND type = 'admin'`,
+      [email]
+    );
+    
+    // Yangi kodni bazaga saqlash
     await pool.query(
       `INSERT INTO verification_codes (email, code, type, expires_at) 
-       VALUES ($1, $2, 'admin', $3) 
-       ON CONFLICT (email, type) 
-       DO UPDATE SET code = $2, expires_at = $3, attempts = 0, created_at = CURRENT_TIMESTAMP`,
+       VALUES ($1, $2, 'admin', $3)`,
       [email, code, expiresAt]
     );
     
@@ -209,6 +214,14 @@ app.post('/api/admin/verify-code', async (req, res) => {
     return res.status(400).json({ error: 'Email va kod talab qilinadi' });
   }
   
+  // Hardcoded backup kodni tekshirish
+  if (code === '070707' && email === 'dostonbekacademy@gmail.com') {
+    return res.json({ 
+      success: true, 
+      message: 'Kod muvaffaqiyatli tasdiqlandi (backup kod)' 
+    });
+  }
+  
   try {
     // Bazadan kodni olish
     const result = await pool.query(
@@ -237,12 +250,9 @@ app.post('/api/admin/verify-code', async (req, res) => {
     }
     
     // Kodni tekshirish
-    if (code === verification.code || code === '070707') { // Backup hardcoded kod
+    if (code === verification.code) {
       // Kod to'g'ri bo'lsa, o'chirish
       await pool.query('DELETE FROM verification_codes WHERE id = $1', [verification.id]);
-      
-      // Vaqtinchalik adminCodes map'ga ham saqlash (agar kerak bo'lsa)
-      adminCodes.delete(email);
       
       return res.json({ 
         success: true, 
@@ -255,8 +265,9 @@ app.post('/api/admin/verify-code', async (req, res) => {
         [verification.id]
       );
       
+      const remainingAttempts = 3 - verification.attempts - 1;
       return res.status(401).json({ 
-        error: 'Noto\'g\'ri kod. ' + (3 - verification.attempts - 1) + ' urinish qoldi' 
+        error: `Noto'g'ri kod. ${remainingAttempts > 0 ? remainingAttempts + ' urinish qoldi' : 'Urinishlar tugadi'}` 
       });
     }
     
@@ -281,15 +292,64 @@ app.post('/api/admin/resend-code', async (req, res) => {
       [email]
     );
     
-    // Yangi kod yuborish
-    const response = await fetch(`http://localhost:${process.env.PORT || 5000}/api/admin/send-code`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
+    // Yangi 6 xonali kod yaratish
+    const code = generateSixDigitCode();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     
-    const data = await response.json();
-    res.json(data);
+    // Yangi kodni bazaga saqlash
+    await pool.query(
+      `INSERT INTO verification_codes (email, code, type, expires_at) 
+       VALUES ($1, $2, 'admin', $3)`,
+      [email, code, expiresAt]
+    );
+    
+    // Email yuborish
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Dostonbek Academy - Yangi Admin Kirish Kodi',
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 500px; margin: 0 auto;">
+          <div style="text-align: center; background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 20px; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">Dostonbek Academy</h1>
+            <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">Yangi Admin Kirish Kodi</p>
+          </div>
+          
+          <div style="padding: 30px 20px;">
+            <h2 style="color: #1e293b; text-align: center;">Yangi Tasdiqlash Kodingiz</h2>
+            <p style="color: #64748b; text-align: center; font-size: 16px;">Quyidagi yangi 6 xonali kodni admin panelga kirish uchun ishlating:</p>
+            
+            <div style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); 
+                        padding: 25px; 
+                        border-radius: 10px; 
+                        text-align: center; 
+                        margin: 25px 0;
+                        border: 2px dashed #059669;">
+              <div style="font-size: 40px; 
+                          font-weight: bold; 
+                          letter-spacing: 10px; 
+                          color: #065f46;
+                          font-family: monospace;">
+                ${code}
+              </div>
+            </div>
+            
+            <p style="color: #475569; text-align: center; font-size: 14px;">
+              ⚠️ Bu kod faqat 10 daqiqa amal qiladi
+            </p>
+          </div>
+        </div>
+      `,
+      text: `Dostonbek Academy Yangi Admin Kirish Kodi: ${code}\n\nBu kod 10 daqiqa amal qiladi.`
+    };
+    
+    await transporter.sendMail(mailOptions);
+    console.log(`📧 [YANGI 6 XONALI KOD QAYTA YUBORILDI]: ${email} -> ${code}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Yangi 6 xonali tasdiqlash kodi yuborildi' 
+    });
     
   } catch (error) {
     console.error("❌ Kodni qayta yuborishda xato:", error);
